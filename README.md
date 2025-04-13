@@ -15,9 +15,15 @@
   <!-- <a href="https://github.com/anurye/gym-turtlebot/actions">
     <img src="https://github.com/anurye/gym-turtlebot/actions/workflows/ci.yml/badge.svg" alt="Build Status">
   </a> -->
-  <img src="https://img.shields.io/badge/ROS2-Jazzy-blue.svg" alt="ROS 2: Jazzy">
-  <img src="https://img.shields.io/badge/Gazebo-Harmonic-orange.svg" alt="Gazebo: Harmonic">
-  <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python 3.8+">
+  <a href="https://docs.ros.org/en/jazzy/Installation.html">
+    <img src="https://img.shields.io/badge/ROS2-Jazzy-blue.svg" alt="ROS 2: Jazzy">
+  </a>
+  <a href="https://gazebosim.org/docs/harmonic/ros_installation/">
+    <img src="https://img.shields.io/badge/Gazebo-Harmonic-orange.svg" alt="Gazebo: Harmonic">
+  </a>
+  <a href="https://www.python.org/downloads/">
+    <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python 3.8+">
+  </a>
 </p>
 
 ---
