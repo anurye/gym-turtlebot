@@ -12,9 +12,9 @@
   <a href="https://www.apache.org/licenses/LICENSE-2.0">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0">
   </a>
-  <!-- <a href="https://github.com/anurye/gym-turtlebot/actions">
-    <img src="https://github.com/anurye/gym-turtlebot/actions/workflows/ci.yml/badge.svg" alt="Build Status">
-  </a> -->
+  <a href="https://github.com/anurye/gym-turtlebot/actions/workflows/ros.yaml">
+    <img src="https://github.com/anurye/gym-turtlebot/actions/workflows/ros.yaml/badge.svg" alt="Build Status">
+  </a>
   <a href="https://docs.ros.org/en/jazzy/Installation.html">
     <img src="https://img.shields.io/badge/ROS2-Jazzy-blue.svg" alt="ROS 2: Jazzy">
   </a>
@@ -22,7 +22,7 @@
     <img src="https://img.shields.io/badge/Gazebo-Harmonic-orange.svg" alt="Gazebo: Harmonic">
   </a>
   <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python 3.8+">
+    <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.8+">
   </a>
 </p>
 
