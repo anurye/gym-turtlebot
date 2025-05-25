@@ -125,6 +125,19 @@ def generate_launch_description():
         output='screen'
     )
 
+    delete_entity = ExecuteProcess(
+        cmd=[
+            'ros2', 'run', 'ros_gz_bridge', 'parameter_bridge',
+            PythonExpression([
+                "'/world/' + ('",
+                LaunchConfiguration('world'),
+                "'.split('/')[-1].split('.')[0]) + "
+                "'/remove@ros_gz_interfaces/srv/DeleteEntity'"
+            ])
+        ],
+        output='screen'
+    )
+
     ld = LaunchDescription()
 
     ld.add_action(declare_world_name)
@@ -136,5 +149,6 @@ def generate_launch_description():
     ld.add_action(world_ctrl_srv)
     ld.add_action(spawn_entity_srv)
     ld.add_action(set_entity_pose)
+    ld.add_action(delete_entity)
 
     return ld

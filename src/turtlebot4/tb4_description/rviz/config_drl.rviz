@@ -5,7 +5,6 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
-        - /Status1
         - /RobotModel1/Description Topic1
       Splitter Ratio: 0.5
     Tree Height: 752
@@ -45,7 +44,7 @@ Visualization Manager:
         Y: 0
         Z: 0
       Plane: XY
-      Plane Cell Count: 10
+      Plane Cell Count: 15
       Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz_default_plugins/TF
@@ -127,65 +126,64 @@ Visualization Manager:
       Show Axes: true
       Show Names: false
       Tree:
-        base_link:
-          base_footprint:
-            {}
-          bump_front_center:
-            {}
-          bump_front_left:
-            {}
-          bump_front_right:
-            {}
-          bump_left:
-            {}
-          bump_right:
-            {}
-          bumper:
-            {}
-          front_caster_link:
-            {}
-          front_left_bottom_weight_block:
-            {}
-          front_left_top_weight_block:
-            {}
-          front_right_bottom_weight_block:
-            {}
-          front_right_top_weight_block:
-            {}
-          imu_link:
-            {}
-          left_wheel:
-            {}
-          right_wheel:
-            {}
-          shell_link:
-            front_left_tower_standoff:
-              {}
-            front_right_tower_standoff:
-              {}
-            oakd_camera_bracket:
-              oakd_link:
-                oakd_imu_frame:
-                  {}
-                oakd_left_camera_frame:
-                  oakd_left_camera_optical_frame:
-                    {}
-                oakd_rgb_camera_frame:
-                  oakd_rgb_camera_optical_frame:
-                    {}
-                oakd_right_camera_frame:
-                  oakd_right_camera_optical_frame:
-                    {}
-            rear_left_tower_standoff:
-              {}
-            rear_right_tower_standoff:
-              {}
-            rplidar_link:
-              {}
-            tower_sensor_plate:
-              {}
         odom:
-          {}
+          base_link:
+            base_footprint:
+              {}
+            bump_front_center:
+              {}
+            bump_front_left:
+              {}
+            bump_front_right:
+              {}
+            bump_left:
+              {}
+            bump_right:
+              {}
+            bumper:
+              {}
+            front_caster_link:
+              {}
+            front_left_bottom_weight_block:
+              {}
+            front_left_top_weight_block:
+              {}
+            front_right_bottom_weight_block:
+              {}
+            front_right_top_weight_block:
+              {}
+            imu_link:
+              {}
+            left_wheel:
+              {}
+            right_wheel:
+              {}
+            shell_link:
+              front_left_tower_standoff:
+                {}
+              front_right_tower_standoff:
+                {}
+              oakd_camera_bracket:
+                oakd_link:
+                  oakd_imu_frame:
+                    {}
+                  oakd_left_camera_frame:
+                    oakd_left_camera_optical_frame:
+                      {}
+                  oakd_rgb_camera_frame:
+                    oakd_rgb_camera_optical_frame:
+                      {}
+                  oakd_right_camera_frame:
+                    oakd_right_camera_optical_frame:
+                      {}
+              rear_left_tower_standoff:
+                {}
+              rear_right_tower_standoff:
+                {}
+              rplidar_link:
+                {}
+              tower_sensor_plate:
+                {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -364,11 +362,11 @@ Visualization Manager:
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
+        Max Value: 0.2029149979352951
+        Min Value: 0.2029149979352951
         Value: true
       Axis: Z
-      Channel Name: intensity
+      Channel Name: x
       Class: rviz_default_plugins/LaserScan
       Color: 255; 255; 255
       Color Transformer: Intensity
@@ -376,9 +374,9 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
-      Max Intensity: 0
+      Max Intensity: 5.943129062652588
       Min Color: 0; 0; 0
-      Min Intensity: 0
+      Min Intensity: -5.94500732421875
       Name: LaserScan
       Position Transformer: XYZ
       Selectable: true
@@ -395,17 +393,46 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
-    - Class: rviz_default_plugins/MarkerArray
+    - Class: rviz_default_plugins/Marker
       Enabled: true
-      Name: MarkerArray
+      Name: Marker
       Namespaces:
         {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
+        Filter size: 10
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: goal_point
+        Value: visualization_marker
+      Value: true
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz_default_plugins/Path
+      Color: 0; 85; 0
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.05000000074505806
+      Name: Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /path
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
@@ -417,19 +444,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: linear_velocity
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: angular_velocity
+        Value: visualization_marker_array
       Value: true
   Enabled: true
   Global Options:
@@ -476,7 +491,7 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
+      Angle: -0.004999999888241291
       Class: rviz_default_plugins/TopDownOrtho
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
@@ -486,7 +501,7 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 55.490028381347656
+      Scale: 53.90342330932617
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
       X: -0.05790555104613304

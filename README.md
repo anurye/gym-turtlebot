@@ -28,9 +28,6 @@
 
 ---
 
-> [!IMPORTANT]
-> **Project Status**: The project is still a work in progress and may not work as expected. Please take a look at the [TODO list](#todo)
-
 ## Overview
 
 `gym-turtlebot` provides a lightweight, modular environment for training reinforcement learning agents using a TurtleBot4 robot simulated in **ROS 2 Jazzy** and **Gazebo Harmonic**. It wraps the simulation in a standard [Gymnasium](https://gymnasium.farama.org/) interface to enable fast prototyping and evaluation of DRL algorithms in realistic robotics environment.
@@ -55,7 +52,9 @@
 - [VSCode](https://code.visualstudio.com/) with [remote containers plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) installed.
 
 > [!NOTE]
-> The Docker setup is adapted from [vscode_ros2_workspace](https://github.com/athackst/vscode_ros2_workspace)
+> The Docker setup is adapted from [vscode_ros2_workspace](https://github.com/athackst/vscode_ros2_workspace).
+> 
+> Refer to the [template repository](https://github.com/athackst/vscode_ros2_workspace) for more detailed instructions on how to use VS-code and docker for ROS.
 
 #### Steps
 1. Build 
@@ -87,23 +86,21 @@ ros2 launch tb4_gz_sim simulation.launch.py
 
 3. Deep reinforcement training example
 > [!IMPORTANT]
-> Gazebo Sim does not support model reset. Working on a work around at the moment.
+> Gazebo Sim does not support model reset at the moment. To work around this limitation, we reset both the robot's odometry and its pose by using:
+> 1. The `SetPose` service from the [robot localization](https://github.com/cra-ros-pkg/robot_localization) package  to reinitialize odometry, and
+> 2. The `SetEntityPose` service from the [ros_gz_interfaces](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_interfaces) package to reposition entities in Gazebo.
+
 ```bash
 ros2 run tb4_drl_navigation example
 ```
 
 
-## Local Setup
+### Local Setup
 
-### Prerequisites
+#### Prerequisites
 - [Ubuntu 24.04](https://ubuntu.com/download/desktop)
 - [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation.html) 
 - [Gazebo Harmonic](https://gazebosim.org/docs/harmonic/ros_installation/)
 
-### Steps
+#### Steps
 The steps are the same as [above](#steps).
-
-## TODO
-- [ ] Implement model reset workaround  
-  **Issue**: Laser scan refresh failure after world reset.
-- [ ] Fix odometry reference initialization. 

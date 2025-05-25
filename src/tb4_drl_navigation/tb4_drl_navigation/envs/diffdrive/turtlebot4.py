@@ -1,15 +1,8 @@
-"""
-RL environment node for Gazebo-ROS2.
-
-Author: Ahmed Yesuf Nurye
-Date: 2025-04-08
-"""
-
 import math
-import os
 from pathlib import Path
 import time
 from typing import (
+    Any,
     Dict,
     List,
     Optional,
@@ -24,28 +17,107 @@ import numpy as np
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
 
-from tb4_drl_navigation.environments.utils.env_helper import EnvHelper
-from tb4_drl_navigation.environments.utils.ros_gz import (
+from tb4_drl_navigation.envs.diffdrive.scenario_generator import ScenarioGenerator
+from tb4_drl_navigation.envs.utils.ros_gz import (
     Publisher,
     Sensors,
-    WorldControl,
+    SimulationControl,
 )
-from tb4_drl_navigation.utils.dtype_convertor import (  # noqa: F401
+from tb4_drl_navigation.utils.dtype_convertor import (
     PoseConverter,
     TwistConverter,
 )
-from tb4_drl_navigation.utils.rviz import RvizPublisher
-from transforms3d.euler import (  # noqa: F401
+from transforms3d.euler import (
     euler2quat,
     quat2euler,
 )
 
 
 class Turtlebot4Env(gym.Env):
+    """
+    Gymnasium environment for a ROS2/Gazebo TurtleBot4 navigation task.
+
+    The agent must navigate a TurtleBot4 through a static map, avoiding obstacles
+    and reaching a randomly sampled goal. At each step, the policy outputs a
+    continuous linear and angular velocity between [0, 0] and [1, 1], which is scaled internally
+    and sent to the robot. Observations consist of discretized laser-range bins,
+    their bearing angles, the distance and orientation to the goal, and
+    the previous action. Episodes terminate on goal reach or collision; timeouts
+    are handled by Gymnasium's TimeLimit wrapper.
+
+    Observation Space
+    -----------------
+    Dict({
+        'min_ranges': Box(low=range_min, high=range_max, shape=(num_bins,), float32),
+            Minimum distance reading within each of `num_bins` laser sectors.
+        'min_ranges_angle': Box(low=angle_min, high=angle_max, shape=(num_bins,), float32),
+            Corresponding bearing angles for each sector's minimum reading.
+        'dist_to_goal': Box(low=0.0, high=100.0, shape=(1,), float32),
+            Euclidean distance [m] from the robot to the goal.
+        'orient_to_goal': Box(low=-pi, high=pi, shape=(1,), float32),
+            Relative heading [rad] from robot's forward direction to the goal.
+        'action': Box(low=0.0, high=1.0, shape=(2,), float32),
+            The last executed (linear, angular) action.
+    })
+
+    Action Space
+    ------------
+    Box(low=[0.0, 0.0], high=[1.0, 1.0], shape=(2,), dtype=float32)
+        Continuous two-dimensional action: normalized forward speed and yaw rate.
+
+    Transition Dynamics
+    -------------------
+    - On `step(action)`, the action is converted to a ROS2 Twist message and
+      published. The simulator propagates the state for `time_delta` seconds. Laser and odometry
+      data are retrieved, processed into the observation dict, and the previous action is included.
+    - The internal `ScenarioGenerator` may be used to shuffle obstacle positions on reset.
+    - Resetting the environment (`reset`) will:
+        1. Pause and reset the Gazebo world (Moldels only, which is currently not supported).
+        2. Sample or accept provided `start_pos` and `goal_pos` (x, y, yaw) options.
+        3. Teleport robot and obstacles to their poses and publish a goal marker.
+        5. Propagate the state and return the initial observation and info.
+
+    Reward Function
+    ---------------
+    The reward is designed in such a way that:
+    - Encourages reaching the goal quickly, penalizes collisions heavily.
+    - Provides a small shaping reward for staying away from obstacles and
+      for forward motion with minimal rotation.
+
+    Four components of the reward function:
+    1. Target goal reached: +100
+    2. Collision detected: -100
+    3. Intermediate reward: linear_vel / 2 - |angular_v| / 2 - 0.001
+    4. Obstacle clearance: (min(min_ranges) - 1)/2 if min(min_ranges) < 1.0 else 0.0
+
+    Start State
+    -----------
+    - Robot is placed at `start_pos` (x, y, yaw) in the world.
+    - Goal is placed at `goal_pos` (x, y, yaw).
+    - Obstacles are distributed ensuring `obstacle_clearance` from both start
+      and goal, if `shuffle_on_reset=True`.
+
+    Episode Termination
+    -------------------
+    The episode ends if either of the following happens:
+    1. Termination: `terminated = True` when:
+        - Distance to goal < `goal_threshold`, or
+        - Any laser reading < `collision_threshold`.
+    2. Truncation: `truncated = True` when the step count exceeds Gymnasium's
+      `max_episode_steps` (configured externally at registration).
+
+    ```python
+    >>> import gymnasium as gym
+    >>> env = env = gym.make('Turtlebot4Env-v0', world_name='static_world')
+    >>> env = FlattenObservation(env=env)
+    >>> env
+    <FlattenObservation<TimeLimit<OrderEnforcing<PassiveEnvChecker<Turtlebot4Env<Turtlebot4Env-v0>>>>>>
+    ```
+    """
 
     def __init__(self,
                  world_name: str = 'static_world',
-                 agent_name: str = 'turtlebot4',
+                 robot_name: str = 'turtlebot4',
                  map_path: Optional[str] = None,
                  yaml_path: Optional[str] = None,
                  spawn_launch_path: Optional[str] = None,
@@ -62,17 +134,17 @@ class Turtlebot4Env(gym.Env):
 
         current_dir = Path(__file__).resolve().parent
         if map_path is None:
-            map_path = os.path.join(f'{current_dir.parent}', 'maps', f'{world_name}.pgm')
+            map_path = current_dir / 'maps' / f'{world_name}.pgm'
         if yaml_path is None:
-            yaml_path = os.path.join(f'{current_dir.parent}', 'maps', f'{world_name}.yaml')
+            yaml_path = current_dir / 'maps' / f'{world_name}.yaml'
 
-        if not Path(map_path).resolve().exists():
+        if not map_path.resolve().exists():
             raise FileNotFoundError(f'Map file missing at: {map_path}')
-        if not Path(yaml_path).resolve().exists():
+        if not yaml_path.resolve().exists():
             raise FileNotFoundError(f'Map metadata missing at: {yaml_path}')
 
         self.world_name = world_name
-        self.agent_name = agent_name
+        self.robot_name = robot_name
         self.map_path = map_path
         self.yaml_path = yaml_path
         self.spawn_launch_path = spawn_launch_path
@@ -88,32 +160,29 @@ class Turtlebot4Env(gym.Env):
         self.goal_threshold = goal_threshold
         self.collision_threshold = collision_threshold
 
-        # rclpy.init(args=None)
-
-        self.sensors = Sensors(node_name=f'{self.agent_name}_sensors')
-        self.ros_gz_pub = Publisher(node_name=f'{self.agent_name}_gz_pub')
-        self.rviz_pub = RvizPublisher(node_name=f'{self.agent_name}_rviz_pub')
-        self.world_control = WorldControl(
-            world_name=self.world_name, node_name=f'{self.agent_name}_world_control'
+        self.sensors = Sensors(node_name=f'{self.robot_name}_sensors')
+        self.ros_gz_pub = Publisher(node_name=f'{self.robot_name}_gz_pub')
+        self.simulation_control = SimulationControl(
+            world_name=self.world_name, node_name=f'{self.robot_name}_world_control'
         )
 
         self.executor = MultiThreadedExecutor()
         self.executor.add_node(self.sensors)
         self.executor.add_node(self.ros_gz_pub)
-        self.executor.add_node(self.rviz_pub)
-        self.executor.add_node(self.world_control)
+        self.executor.add_node(self.simulation_control)
 
         self.executor.spin_once(timeout_sec=1.0)
 
         self.pose_converter = PoseConverter()
         self.twist_converter = TwistConverter()
 
-        self.env_helper = EnvHelper(
+        self.env_helper = ScenarioGenerator(
             map_path=self.map_path,
             yaml_path=self.yaml_path,
             robot_radius=self.robot_radius,
             min_separation=self.min_separation,
-            obstacle_clearance=self.obstacle_clearance
+            obstacle_clearance=self.obstacle_clearance,
+            seed=None
         )
 
         self.action_space = spaces.Box(
@@ -129,7 +198,7 @@ class Turtlebot4Env(gym.Env):
         self._start_pose: Optional[Pose] = None
 
     def _get_observation_space(self) -> spaces.Dict:
-        self.world_control.pause_unpause(pause=False)
+        self.simulation_control.pause_unpause(pause=False)
         # Wait for scan and odometry to initialize
         while True:
             self.executor.spin_once(timeout_sec=0.1)
@@ -155,7 +224,7 @@ class Turtlebot4Env(gym.Env):
             ),
         })
 
-    def _get_info(self) -> Optional[Dict[str, float]]:
+    def _get_info(self) -> Dict[str, Any]:
         pass
 
     def _get_obs(self) -> Dict:
@@ -212,10 +281,8 @@ class Turtlebot4Env(gym.Env):
 
     def _process_odom(self) -> Tuple[float, float]:
         # Get current pose
-        # agent_pose = self.sensors.get_world_pose_from_odom(
-        #     start_pose=self._start_pose
-        # )
-        agent_pose = self.sensors.get_latest_odom()
+        pose_stamped = self.sensors.get_latest_pose_stamped()
+        agent_pose = pose_stamped.pose
 
         # Extract positions
         agent_x = agent_pose.position.x
@@ -261,18 +328,22 @@ class Turtlebot4Env(gym.Env):
             'linear': (float(action[0]), 0.0, 0.0),
             'angular': (0.0, 0.0, float(action[1]))
         })
-        self.rviz_pub.pub_vel_marker(twist=twist_msg)
         self.ros_gz_pub.pub_cmd_vel(twist_msg)
 
         observation, info = self._propagate_state(time_delta=self.time_delta)
 
+        self.ros_gz_pub.pub_robot_path(pose_stamped=self.sensors.get_latest_pose_stamped())
+
+        goal_reached = self._goal_reached(dist_to_goal=observation['dist_to_goal'].item())
+        collision = self._collision(min_ranges=observation['min_ranges'])
+        if goal_reached:
+            self.sensors.get_logger().info('Goal reached!')
+        elif collision:
+            self.sensors.get_logger().info('Colission detected!')
+
         # MDP
         truncated = False
-        terminated = (
-            self._goal_reached(
-                dist_to_goal=observation['dist_to_goal'].item()
-            ) or self._collision(min_ranges=observation['min_ranges'])
-        )
+        terminated = goal_reached or collision
         reward = self._get_reward(
             action=action,
             min_ranges=observation['min_ranges'],
@@ -287,52 +358,52 @@ class Turtlebot4Env(gym.Env):
               ) -> Tuple[Dict]:
         super().reset(seed=seed)
 
+        self.simulation_control.reset_world()
+
         # Initialize last action to zeros
         self._last_action = np.zeros(self.action_space.shape, dtype=np.float32)
-
         twist_msg = self.twist_converter.from_dict({
             'linear': (float(self._last_action[0]), 0.0, 0.0),
             'angular': (0.0, 0.0, float(self._last_action[1]))
         })
-        self.rviz_pub.pub_vel_marker(twist=twist_msg)
         self.ros_gz_pub.pub_cmd_vel(twist_msg)
 
+        self.ros_gz_pub.clear_path()
+
         options = options or {}
-        start_pos = options.get('start_pos')  # (x, y)
-        goal_pos = options.get('goal_pos')    # (x, y)
+        start_pos = options.get('start_pos')  # (x, y, yaw)
+        goal_pos = options.get('goal_pos')    # (x, y, yaw)
         if start_pos is None or goal_pos is None:
-            start_pos, goal_pos = self.env_helper.generate_start_goal()
-            # print(f'Start: {start_pos}, Goal: {goal_pos}')
-            # TODO: Odometry doesn't start relative to the world.
-            start_pos = (0.0, 0.0)
+            start_xy, goal_xy = self.env_helper.generate_start_goal(
+                max_attempts=100,
+                goal_sampling_bias='close',
+                eps=1e-5,
+            )
+            start_yaw = np.random.uniform(-np.pi, np.pi)
+            goal_yaw = np.random.uniform(-np.pi, np.pi)
+            start_pos = (*start_xy, start_yaw)
+            goal_pos = (*goal_xy, goal_yaw)
+        start_quat = euler2quat(ai=0.0, aj=0.0, ak=start_pos[2], axes='sxyz')
+        goal_quat = euler2quat(ai=0.0, aj=0.0, ak=goal_pos[2], axes='sxyz')
 
         # Convert pos to pose
         self._start_pose = self.pose_converter.from_dict({
             'position': (start_pos[0], start_pos[1], 0.01),
-            'orientation': (0.0, 0.0, 0.0, 1.0)
+            'orientation': (start_quat[1], start_quat[2], start_quat[3], start_quat[0])
         })
         self._target_pose = self.pose_converter.from_dict({
             'position': (goal_pos[0], goal_pos[1], 0.01),
-            'orientation': (0.0, 0.0, 0.0, 1.0)
+            'orientation': (goal_quat[1], goal_quat[2], goal_quat[3], goal_quat[0])
         })
-        self.rviz_pub.pub_goal_marker(pose=self._target_pose)
 
-        self.world_control.reset_world()
-
-        # Unfortunately gazebo reset unspawns the robot
-        self.world_control.spawn_robot(
-            'tb4_gz_sim',
-            'spawn_tb4.launch.py',
-            f'x_pose:={start_pos[0]}',
-            f'y_pose:={start_pos[1]}',
-            'z_pose:=0.01',
-            'roll:=0.00',
-            'pitch:=0.00',
-            'yaw:=0.00',
-            build_first=False,
+        self.simulation_control.set_entity_pose(
+            entity_name=self.robot_name,
+            pose=self._start_pose
         )
-        # TODO: will be used after the reset problem is figured out
-        # self.world_control.set_entity_pose(self.agent_name, self._start_pose)
+        self.simulation_control.set_pose(
+            pose=self._start_pose, frame_id='odom'
+        )
+        self.ros_gz_pub.pub_goal_marker(goal_pose=self._target_pose)
 
         # Shuffle obstacles
         if self.shuffle_on_reset:
@@ -342,16 +413,25 @@ class Turtlebot4Env(gym.Env):
 
         observation, info = self._propagate_state(time_delta=self.time_delta)
 
+        if options.get('debug'):
+            self.simulation_control.pause_unpause(pause=False)
+            self.ros_gz_pub.publish_observation(
+                observation=observation,
+                robot_pose=self.sensors.get_latest_pose_stamped(),
+                goal_pose=self._target_pose
+            )
+            self.simulation_control.pause_unpause(pause=True)
+
         return observation, info
 
     def _propagate_state(self, time_delta: float = 0.2) -> Tuple[Dict]:
-        self.world_control.pause_unpause(pause=False)
+        self.simulation_control.pause_unpause(pause=False)
 
         end_time = time.time() + time_delta
         while time.time() < end_time:
             self.executor.spin_once(timeout_sec=max(0, end_time - time.time()))
 
-        self.world_control.pause_unpause(pause=True)
+        self.simulation_control.pause_unpause(pause=True)
 
         observation = self._get_obs()
         info = {'distance_to_goal': observation['dist_to_goal'].item()}
@@ -360,7 +440,7 @@ class Turtlebot4Env(gym.Env):
 
     def _shuffle_obstacles(self, start_pos: np.ndarray, goal_pos: np.ndarray) -> None:
         # Get random obstacle locations
-        obstacles = self.world_control.get_obstacles(starts_with=self.obstacle_prefix)
+        obstacles = self.simulation_control.get_obstacles(starts_with=self.obstacle_prefix)
         obstacles_pos = self.env_helper.generate_obstacles(
             num_obstacles=len(obstacles), start_pos=start_pos, goal_pos=goal_pos
         )
@@ -370,7 +450,7 @@ class Turtlebot4Env(gym.Env):
                 'position': (obs_pos[0], obs_pos[1], 0.01),
                 'orientation': (0.0, 0.0, 0.0, 1.0)
             })
-            self.world_control.set_entity_pose(
+            self.simulation_control.set_entity_pose(
                 entity_name=obs_name, pose=obs_pose
             )
 
@@ -393,36 +473,41 @@ class Turtlebot4Env(gym.Env):
 
     def _goal_reached(self, dist_to_goal: float) -> bool:
         if dist_to_goal < self.goal_threshold:
-            self.sensors.get_logger().info('Goal reached!')
             return True
         return False
 
     def _collision(self, min_ranges) -> bool:
         if min(min_ranges) < self.collision_threshold:
-            self.sensors.get_logger().info('Colission detected!')
             return True
         return False
 
     def close(self) -> None:
-        self.world_control.destroy_node()
+        self.simulation_control.destroy_node()
         self.ros_gz_pub.destroy_node()
         self.sensors.destroy_node()
-        self.rviz_pub.destroy_node()
         rclpy.try_shutdown()
 
 
 def main():
-    import tb4_drl_navigation.environments  # noqa: F401
+    import tb4_drl_navigation.envs  # noqa: F401
+
+    rclpy.init(args=None)
+
     env = gym.make('Turtlebot4Env-v0', world_name='static_world')
 
     try:
-        i = 0
-        while i < 3:
-            obs, info = env.reset()
-            print('Obs:', obs, '\n\n', 'Info: ', info, '\n\n')
-            i += 1
+        while input('Reset (y/n): ').lower() == 'y':
+            obs, info = env.reset(options={'debug': True})
+            min_ranges = obs.get('min_ranges', np.array([]))
+            min_ranges_angles = obs.get('min_ranges_angle', np.array([]))
+
+            print('orient_to_goal:', obs.get('orient_to_goal'), '\nInfo: ', info)
+            print('Min range:', min(min_ranges))
+            print('Min range angle:', min_ranges_angles[np.argmin(min_ranges)])
     except KeyboardInterrupt:
-        pass
+        env.close()
+    finally:
+        env.close()
 
 
 if __name__ == '__main__':

@@ -25,7 +25,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'example = tb4_drl_navigation.examples.sac:main'
+            'example = tb4_drl_navigation.examples.sac:main',
+            'rosgz = tb4_drl_navigation.environments.utils.ros_gz:main'
         ],
     },
 )
