@@ -23,11 +23,11 @@
 # replace odom_tf_bridge - check gz and ros topic names
 # gz topic published by DiffDrive plugin
 # prefix ros2 topic with gz
-- ros_topic_name: "tf"
-  gz_topic_name: "/tf"
-  ros_type_name: "tf2_msgs/msg/TFMessage"
-  gz_type_name: "gz.msgs.Pose_V"
-  direction: GZ_TO_ROS
+# - ros_topic_name: "tf"
+#   gz_topic_name: "/tf"
+#   ros_type_name: "tf2_msgs/msg/TFMessage"
+#   gz_type_name: "gz.msgs.Pose_V"
+#   direction: GZ_TO_ROS
 
 # replace imu_bridge - check gz topic name
 - ros_topic_name: "imu"

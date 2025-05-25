@@ -1,12 +1,4 @@
-"""
-EnvHelper: Used to automaticaly obtain free pos given a map file.
-
-Author: Ahmed Yesuf Nurye
-Date: 2025-04-11
-"""
-
 import logging
-import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -17,25 +9,75 @@ from sklearn.neighbors import KDTree
 import yaml
 
 
-class EnvHelper:
+class ScenarioGenerator:
+    """
+    Generate randomized navigation scenarios from a static occupancy map.
+
+    How it works:
+
+      1. Load a occupancy map image and its YAML metadata (resolution, origin,
+         thresholds).
+      2. Process the map into “buffered free space” by eroding obstacles
+         according to robot radius and clearance.
+      3. Build a KD-tree of valid free cells.
+      4. Provide `generate_start_goal()` to sample start/goal pairs subject to
+         a minimum separation constraint and optional distance bias.
+      5. Provide `generate_obstacles()` to place N obstacles at valid locations
+         while respecting clearance from start/goal.
+
+    Parameters
+    ----------
+    map_path : str
+        Path to the occupancy map image.
+    yaml_path : str
+        Path to the corresponding YAML map metadata file.
+    robot_radius : float, optional
+        Robot's circular radius [m] used for map buffering (default: 0.3).
+    min_separation : float, optional
+        Minimum start-to-goal distance [m] (default: 2.0).
+    obstacle_clearance : float, optional
+        Clearance [m] required around any obstacle (default: 1.5).
+
+    Examples
+    --------
+    >>> gen = ScenarioGenerator(
+    ...     map_path='maps/static_world.pgm',
+    ...     yaml_path='maps/static_world.yaml',
+    ...     robot_radius=0.4,
+    ...     min_separation=4.0,
+    ...     obstacle_clearance=2.0
+    ... )
+    >>> start, goal = gen.generate_start_goal(
+    ...     max_attempts=50, goal_sampling_bias='far', eps=1e-4
+    ... )
+    >>> obstacles = gen.generate_obstacles(
+    ...     num_obstacles=10, start_pos=start, goal_pos=goal
+    ... )
+
+    """
+
     def __init__(
             self,
-            map_path: str,
-            yaml_path: str,
+            map_path: Path,
+            yaml_path: Path,
             robot_radius: float = 0.3,
             min_separation: float = 2.0,
-            obstacle_clearance: float = 1.5
+            obstacle_clearance: float = 1.5,
+            seed: Optional[int] = None,
     ):
         self.logger = logging.getLogger(self.__class__.__name__)
         self._validate_inputs(
             map_path, yaml_path, robot_radius, min_separation, obstacle_clearance
         )
 
-        self.map_path = Path(map_path)
-        self.yaml_path = Path(yaml_path)
+        self.map_path = map_path
+        self.yaml_path = yaml_path
         self.robot_radius = robot_radius
         self.min_separation = min_separation
         self.obstacle_clearance = obstacle_clearance
+
+        self.seed = seed
+        self._rng = np.random.default_rng(seed=self.seed)
 
         self.metadata = self._load_metadata()
         self.origin = self._parse_origin()
@@ -44,12 +86,17 @@ class EnvHelper:
         self.kdtree = KDTree(self.free_cells)
 
     @staticmethod
-    def _validate_inputs(*args) -> None:
-        map_path, yaml_path, robot_radius, min_sep, obs_clear = args
+    def _validate_inputs(
+        map_path: Path,
+        yaml_path: Path,
+        robot_radius: float,
+        min_sep: float,
+        obs_clear: float
+    ) -> None:
 
-        if not Path(map_path).exists():
+        if not map_path.exists():
             raise FileNotFoundError(f'Map file {map_path} not found')
-        if not Path(yaml_path).exists():
+        if not yaml_path.exists():
             raise FileNotFoundError(f'Map metadata file {yaml_path} not found')
         if any(val <= 0 for val in [robot_radius, min_sep, obs_clear]):
             raise ValueError('All clearance/distance parameters must be positive')
@@ -127,30 +174,47 @@ class EnvHelper:
         return np.column_stack(np.where(self.processed_map == 1))
 
     def generate_start_goal(
-            self, max_attempts: int = 100
+            self,
+            max_attempts: int = 100,
+            goal_sampling_bias: str = 'uniform',
+            eps: float = 1e-5,
     ) -> Tuple[Tuple[float, float], Tuple[float, float]]:
         """Generate valid start and goal positions."""
         min_px_dist = self.min_separation / self.metadata['resolution']
 
         for _ in range(max_attempts):
-            start_idx = np.random.choice(len(self.free_cells))
+            start_idx = self._rng.choice(len(self.free_cells))
             start_cell = self.free_cells[start_idx]
 
-            distances = self.kdtree.query(
+            distances, indices = self.kdtree.query(
                 [start_cell], k=len(self.free_cells), return_distance=True
-            )[0][0]
+            )
+            distances = distances.squeeze()
+            indices = indices.squeeze()
 
-            for i, d in enumerate(distances):
-                if d >= min_px_dist:
-                    goal_cell = self.free_cells[
-                        self.kdtree.query(
-                            [start_cell], k=i + 1, return_distance=False
-                        )[0][-1]
-                    ]
-                    return (
-                        self.map_to_world(start_cell),
-                        self.map_to_world(goal_cell),
-                    )
+            valid_mask = distances >= min_px_dist
+            valid_indices = indices[valid_mask]
+            valid_distances = distances[valid_mask]
+            if not valid_indices.size > 0:
+                continue
+
+            if goal_sampling_bias == 'uniform':
+                weights = np.ones_like(valid_distances)
+            elif goal_sampling_bias == 'close':
+                weights = 1.0 / (valid_distances + eps)
+            elif goal_sampling_bias == 'far':
+                weights = valid_distances
+            else:
+                raise ValueError(f'Invalid goal_sampling_bias: {goal_sampling_bias}')
+
+            weights /= weights.sum()
+
+            goal_cell = self.free_cells[self._rng.choice(valid_indices, p=weights)]
+            return (
+                self.map_to_world(start_cell),
+                self.map_to_world(goal_cell),
+            )
+
         raise RuntimeError(
             f'Failed to find valid start-goal pair in {max_attempts} attempts'
         )
@@ -188,7 +252,7 @@ class EnvHelper:
             if len(remaining_indices) == 0:
                 break
             # Randomly select from remaining candidates
-            idx = np.random.choice(remaining_indices)
+            idx = self._rng.choice(remaining_indices)
             selected = candidates[idx]
             obstacle_positions.append(selected)
 
@@ -357,7 +421,7 @@ class EnvHelper:
         # plt.colorbar(label="Map Intensity", fraction=0.03, pad=0.01)
         plt.xlabel('World X [m]', fontsize=12)
         plt.ylabel('World Y [m]', fontsize=12)
-        plt.title('Navigation Environment Debug View', fontsize=14, pad=20)
+        plt.title('Navigation Scenario Debug View', fontsize=14, pad=20)
 
         # Configure grid and background
         plt.grid(True, color='white', alpha=0.3, linestyle='--')
@@ -400,17 +464,22 @@ def main():
     logging.basicConfig(level=logging.INFO)
     try:
         current_dir = Path(__file__).parent
-        map_path = os.path.join(current_dir.parent.resolve(), 'maps', 'static_world.pgm')
-        yaml_path = os.path.join(current_dir.parent.resolve(), 'maps', 'static_world.yaml')
-        env = EnvHelper(
+        map_path = current_dir / 'maps' / 'static_world.pgm'
+        yaml_path = current_dir / 'maps' / 'static_world.yaml'
+
+        env = ScenarioGenerator(
             map_path=map_path,
             yaml_path=yaml_path,
             robot_radius=0.4,
-            min_separation=8.0,
-            obstacle_clearance=0.5,
+            min_separation=2.0,
+            obstacle_clearance=1.0,
+            seed=None,
         )
 
-        start, goal = env.generate_start_goal()
+        start, goal = env.generate_start_goal(
+            max_attempts=100,
+            goal_sampling_bias='uniform'
+        )
         obstacles = env.generate_obstacles(
             num_obstacles=12, start_pos=start, goal_pos=goal
         )

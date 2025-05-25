@@ -13,6 +13,9 @@ from std_msgs.msg import Header
 class BaseConverter(ABC):
     """Abstract base class for ROS message conversion."""
 
+    def __init__(self):
+        super().__init__()
+
     @abstractmethod
     def to_dict(self, msg):
         pass
@@ -32,6 +35,9 @@ class BaseConverter(ABC):
 
 class TwistConverter(BaseConverter):
     """Converter for Twist and TwistStamped messages."""
+
+    def __init__(self):
+        super().__init__()
 
     def to_dict(self, msg: Twist) -> dict:
         return {
@@ -61,6 +67,9 @@ class TwistConverter(BaseConverter):
 class TwistStampedConverter(TwistConverter):
     """Converter for TwistStamped messages."""
 
+    def __init__(self):
+        super().__init__()
+
     def to_dict(self, msg: TwistStamped) -> dict:
         return {
             'stamp': msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9,
@@ -80,6 +89,9 @@ class TwistStampedConverter(TwistConverter):
 
 class PoseConverter(BaseConverter):
     """Converter for Pose and PoseStamped messages."""
+
+    def __init__(self):
+        super().__init__()
 
     def to_dict(self, msg: Pose) -> dict:
         return {
@@ -117,6 +129,9 @@ class PoseConverter(BaseConverter):
 
 class PoseStampedConverter(PoseConverter):
     """Converter for PoseStamped messages."""
+
+    def __init__(self):
+        super().__init__()
 
     def to_dict(self, msg: PoseStamped) -> dict:
         return {

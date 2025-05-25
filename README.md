@@ -12,9 +12,9 @@
   <a href="https://www.apache.org/licenses/LICENSE-2.0">
     <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache 2.0">
   </a>
-  <!-- <a href="https://github.com/anurye/gym-turtlebot/actions">
-    <img src="https://github.com/anurye/gym-turtlebot/actions/workflows/ci.yml/badge.svg" alt="Build Status">
-  </a> -->
+  <a href="https://github.com/anurye/gym-turtlebot/actions/workflows/ros.yaml">
+    <img src="https://github.com/anurye/gym-turtlebot/actions/workflows/ros.yaml/badge.svg" alt="Build Status">
+  </a>
   <a href="https://docs.ros.org/en/jazzy/Installation.html">
     <img src="https://img.shields.io/badge/ROS2-Jazzy-blue.svg" alt="ROS 2: Jazzy">
   </a>
@@ -22,14 +22,11 @@
     <img src="https://img.shields.io/badge/Gazebo-Harmonic-orange.svg" alt="Gazebo: Harmonic">
   </a>
   <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/python-3.8+-blue.svg" alt="Python 3.8+">
+    <img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.8+">
   </a>
 </p>
 
 ---
-
-> [!IMPORTANT]
-> **Project Status**: The project is still a work in progress and may not work as expected. Please take a look at the [TODO list](#todo)
 
 ## Overview
 
@@ -55,7 +52,9 @@
 - [VSCode](https://code.visualstudio.com/) with [remote containers plugin](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) installed.
 
 > [!NOTE]
-> The Docker setup is adapted from [vscode_ros2_workspace](https://github.com/athackst/vscode_ros2_workspace)
+> The Docker setup is adapted from [vscode_ros2_workspace](https://github.com/athackst/vscode_ros2_workspace).
+> 
+> Refer to the [template repository](https://github.com/athackst/vscode_ros2_workspace) for more detailed instructions on how to use VS-code and docker for ROS.
 
 #### Steps
 1. Build 
@@ -87,23 +86,21 @@ ros2 launch tb4_gz_sim simulation.launch.py
 
 3. Deep reinforcement training example
 > [!IMPORTANT]
-> Gazebo Sim does not support model reset. Working on a work around at the moment.
+> Gazebo Sim does not support model reset at the moment. To work around this limitation, we reset both the robot's odometry and its pose by using:
+> 1. The `SetPose` service from the [robot localization](https://github.com/cra-ros-pkg/robot_localization) package  to reinitialize odometry, and
+> 2. The `SetEntityPose` service from the [ros_gz_interfaces](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_interfaces) package to reposition entities in Gazebo.
+
 ```bash
 ros2 run tb4_drl_navigation example
 ```
 
 
-## Local Setup
+### Local Setup
 
-### Prerequisites
+#### Prerequisites
 - [Ubuntu 24.04](https://ubuntu.com/download/desktop)
 - [ROS 2 Jazzy](https://docs.ros.org/en/jazzy/Installation.html) 
 - [Gazebo Harmonic](https://gazebosim.org/docs/harmonic/ros_installation/)
 
-### Steps
+#### Steps
 The steps are the same as [above](#steps).
-
-## TODO
-- [ ] Implement model reset workaround  
-  **Issue**: Laser scan refresh failure after world reset.
-- [ ] Fix odometry reference initialization. 

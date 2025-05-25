@@ -1,34 +1,29 @@
-"""
-Utility functions for executing ros2 launch files.
-
-Author: Ahmed Yesuf Nurye
-Date: 2025-04-12
-"""
-
-import os
+from pathlib import Path
 import shlex
 import subprocess
 
 
 class Launcher:
-    def __init__(self, workspace_dir):
-        self.workspace_dir = os.path.expanduser(workspace_dir)
-        if not os.path.isdir(self.workspace_dir):
+    """Utility class for executing ros2 launch files."""
+
+    def __init__(self, workspace_dir: Path):
+        self.workspace_dir = workspace_dir.expanduser()
+        if not self.workspace_dir.is_dir():
             raise ValueError(f'Workspace directory {self.workspace_dir} does not exist.')
 
     @classmethod
     def find_workspace(cls, start_dir=None):
         """Locate the ROS2 workspace directory by searching upwards from start_dir."""
         if start_dir is None:
-            start_dir = os.getcwd()
-        current_dir = os.path.abspath(start_dir)
+            start_dir = Path(__file__).parent
+        current_dir = start_dir.resolve()
         while True:
-            src_dir = os.path.join(current_dir, 'src')
-            # install_dir = os.path.join(current_dir, 'install')
-            # build_dir = os.path.join(current_dir, 'build')
-            if os.path.isdir(src_dir):
+            src_dir = current_dir / 'src'
+            install_dir = current_dir / 'install'
+            build_dir = current_dir / 'build'
+            if src_dir.is_dir() and install_dir.is_dir() and build_dir.is_dir():
                 return current_dir
-            parent_dir = os.path.dirname(current_dir)
+            parent_dir = current_dir.parent
             if parent_dir == current_dir:
                 raise FileNotFoundError('Could not find ROS2 workspace directory.')
             current_dir = parent_dir
@@ -77,6 +72,8 @@ if __name__ == '__main__':
     try:
         workspace = Launcher.find_workspace()
         launcher = Launcher(workspace)
-        launcher.launch('tb4_gz_sim', 'simulation.launch.py')
+        launcher.launch('tb4_gz_sim', 'simulation.launch.py', build_first=True)
+    except KeyboardInterrupt:
+        pass
     except Exception as e:
         print(f'Error: {e}')
