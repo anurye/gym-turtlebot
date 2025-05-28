@@ -91,9 +91,8 @@ ros2 launch tb4_gz_sim simulation.launch.py
 > 2. The `SetEntityPose` service from the [ros_gz_interfaces](https://github.com/gazebosim/ros_gz/tree/ros2/ros_gz_interfaces) package to reposition entities in Gazebo.
 
 ```bash
-ros2 run tb4_drl_navigation example
+python3 src/tb4_drl_navigation/tb4_drl_navigation/examples/sac.py train
 ```
-
 
 ### Local Setup
 

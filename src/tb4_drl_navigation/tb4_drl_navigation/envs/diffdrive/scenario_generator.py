@@ -1,3 +1,4 @@
+import argparse
 import logging
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -219,10 +220,12 @@ class ScenarioGenerator:
             f'Failed to find valid start-goal pair in {max_attempts} attempts'
         )
 
-    def generate_obstacles(self,
-                           num_obstacles: int,
-                           start_pos: Tuple[float, float],
-                           goal_pos: Tuple[float, float]) -> List[Tuple[float, float]]:
+    def generate_obstacles(
+            self,
+            num_obstacles: int,
+            start_pos: Tuple[float, float],
+            goal_pos: Tuple[float, float]
+    ) -> List[Tuple[float, float]]:
         """Generate obstacle positions with clearance requirements."""
         resolution = self.metadata['resolution']
         min_px_clear = self.obstacle_clearance / resolution
@@ -464,31 +467,49 @@ def main():
     logging.basicConfig(level=logging.INFO)
     try:
         current_dir = Path(__file__).parent
-        map_path = current_dir / 'maps' / 'static_world.pgm'
-        yaml_path = current_dir / 'maps' / 'static_world.yaml'
+        default_map = current_dir / 'maps' / 'static_world.pgm'
+        default_yaml = current_dir / 'maps' / 'static_world.yaml'
 
-        env = ScenarioGenerator(
-            map_path=map_path,
-            yaml_path=yaml_path,
+        parser = argparse.ArgumentParser(
+            description='Load and process a static world map and its metadata YAML.'
+        )
+        parser.add_argument(
+            '-m', '--map',
+            type=Path,
+            default=default_map,
+            help=f'Path to the PGM map file (default: {default_map})'
+        )
+        parser.add_argument(
+            '-y', '--yaml',
+            type=Path,
+            default=default_yaml,
+            help=f'Path to the YAML metadata file (default: {default_yaml})'
+        )
+
+        args = parser.parse_args()
+
+        nav_scenario = ScenarioGenerator(
+            map_path=args.map,
+            yaml_path=args.yaml,
             robot_radius=0.4,
             min_separation=2.0,
             obstacle_clearance=1.0,
             seed=None,
         )
 
-        start, goal = env.generate_start_goal(
+        start, goal = nav_scenario.generate_start_goal(
             max_attempts=100,
             goal_sampling_bias='uniform'
         )
-        obstacles = env.generate_obstacles(
+        obstacles = nav_scenario.generate_obstacles(
             num_obstacles=12, start_pos=start, goal_pos=goal
         )
 
-        env.logger.info(f'Start: {start}')
-        env.logger.info(f'Goal: {goal}')
-        env.logger.info(f'Obstacles: {obstacles}')
+        nav_scenario.logger.info(f'Start: {start}')
+        nav_scenario.logger.info(f'Goal: {goal}')
+        nav_scenario.logger.info(f'Obstacles: {obstacles}')
 
-        env.plot_debug(
+        nav_scenario.plot_debug(
             start_pos=start, goal_pos=goal, obstacles=obstacles
         )
 
