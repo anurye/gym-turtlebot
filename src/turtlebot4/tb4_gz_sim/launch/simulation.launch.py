@@ -60,6 +60,7 @@ def generate_launch_description():
     robot_sdf = LaunchConfiguration('robot_sdf')
     slam_params_file = LaunchConfiguration('slam_params_file')
     do_slam = LaunchConfiguration('do_slam')
+    do_localization = LaunchConfiguration('do_localization')
 
     # Declare the launch arguments
     declare_namespace_cmd = DeclareLaunchArgument(
@@ -128,6 +129,13 @@ def generate_launch_description():
         'do_slam',
         default_value='false',
         description='Option to do mapping.',
+        choices=['true', 'false'],
+    )
+
+    declare_do_localization_cmd = DeclareLaunchArgument(
+        'do_localization',
+        default_value='true',
+        description='Option to do localization using the robot_localization pkg.',
         choices=['true', 'false'],
     )
 
@@ -202,6 +210,7 @@ def generate_launch_description():
     )
 
     robot_localization_node = Node(
+        condition=IfCondition(do_localization),
         package='robot_localization',
         executable='ekf_node',
         name='ekf_filter_node',
@@ -224,6 +233,7 @@ def generate_launch_description():
     ld.add_action(declare_world_cmd)
     ld.add_action(declare_robot_name_cmd)
     ld.add_action(declare_robot_sdf_cmd)
+    ld.add_action(declare_do_localization_cmd)
     ld.add_action(declare_slam_params_file_cmd)
     ld.add_action(declare_do_slam_cmd)
     ld.add_action(gz_world)

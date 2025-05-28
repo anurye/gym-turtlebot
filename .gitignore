@@ -2,4 +2,5 @@ build/*
 install/*
 log/*
 site/*
+experiments/
 __pycache__

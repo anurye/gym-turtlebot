@@ -36,10 +36,8 @@ from ros_gz_interfaces.srv import (
     SpawnEntity
 )
 from sensor_msgs.msg import LaserScan
-from transforms3d.euler import (
-    euler2quat,
-    quat2euler,
-)
+from std_msgs.msg import Header
+from transforms3d.euler import quat2euler
 from visualization_msgs.msg import Marker, MarkerArray
 
 
@@ -119,7 +117,7 @@ class Publisher(Node):
     def __init__(
             self,
             base_frame_id: str = 'base_link',
-            path_frame_id: str = 'odom',
+            odom_frame_id: str = 'odom',
             node_name: str = 'ros_gz_publisher'
     ) -> None:
         super().__init__(
@@ -132,7 +130,7 @@ class Publisher(Node):
         )
 
         self.base_frame_id = base_frame_id
-        self.path_frame_id = path_frame_id
+        self.odom_frame_id = odom_frame_id
 
         self.cmd_vel_publisher_ = self.create_publisher(
             TwistStamped,
@@ -157,7 +155,7 @@ class Publisher(Node):
         )
 
         self.path = Path()
-        self.path.header.frame_id = self.path_frame_id
+        self.path.header.frame_id = self.odom_frame_id
 
     def pub_cmd_vel(self, action: Twist) -> None:
         msg = TwistStamped()
@@ -168,20 +166,20 @@ class Publisher(Node):
 
     def pub_goal_marker(self, goal_pose: Pose, marker_id: int = 0) -> None:
         marker = Marker()
-        marker.header.frame_id = self.path_frame_id
+        marker.header.frame_id = self.odom_frame_id
         marker.header.stamp = self.get_clock().now().to_msg()
         marker.ns = 'goal'
         marker.id = marker_id
         marker.type = Marker.ARROW
         marker.action = Marker.ADD
         marker.pose = goal_pose
-        marker.scale.x = 1.0
+        marker.scale.x = 0.5
         marker.scale.y = 0.05
         marker.scale.z = 0.1
         marker.color.a = 1.0
         marker.color.r = 0.0
-        marker.color.g = 1.0
-        marker.color.b = 0.0
+        marker.color.g = 0.0
+        marker.color.b = 1.0
         marker.lifetime = rclpy.duration.Duration(seconds=0).to_msg()
         self.marker_publisher.publish(marker)
 
@@ -198,8 +196,17 @@ class Publisher(Node):
             self,
             observation: Dict,
             robot_pose: PoseStamped,
-            goal_pose: Pose
+            goal_pose: Pose,
+            robot_radius: float = 1.0,
     ) -> None:
+        odom_header = Header()
+        odom_header.frame_id = self.odom_frame_id
+        odom_header.stamp = self.get_clock().now().to_msg()
+
+        base_link_header = Header()
+        base_link_header.frame_id = self.base_frame_id
+        base_link_header.stamp = robot_pose.header.stamp
+
         marker_array = MarkerArray()
 
         # Get the robots pose and orientation
@@ -234,13 +241,12 @@ class Publisher(Node):
             p_odom = T @ np.array([x_local, y_local, 1])
 
             marker = Marker()
-            marker.header.frame_id = 'odom'
-            marker.header.stamp = self.get_clock().now().to_msg()
+            marker.header = odom_header
             marker.ns = 'min_ranges'
             marker.id = i
             marker.type = Marker.LINE_STRIP
             marker.action = Marker.ADD
-            marker.scale.x = 0.05
+            marker.scale.x = 0.025
             marker.color.a = 1.0
             marker.color.r = 1.0
             start = Point(x=robot_x, y=robot_y, z=robot_z)
@@ -248,43 +254,128 @@ class Publisher(Node):
             marker.points = [start, end]
             marker_array.markers.append(marker)
 
-        # Goal line marker
-        marker = Marker()
-        marker.header.frame_id = 'odom'
-        marker.header.stamp = self.get_clock().now().to_msg()
-        marker.ns = 'goal_line'
-        marker.id = 0
-        marker.type = Marker.LINE_STRIP
-        marker.scale.x = 0.05
-        marker.color.g = 1.0
-        marker.color.a = 1.0
-        start = Point(x=robot_x, y=robot_y, z=robot_z)
-        end = Point(x=goal_pose.position.x, y=goal_pose.position.y, z=0.0)
-        marker.points = [start, end]
+        # Visualize relative distance to goal and orientation
+        marker = self._create_arrow(
+            start_point=Point(x=robot_x, y=robot_y, z=0.0),
+            end_point=Point(x=goal_pose.position.x, y=goal_pose.position.y, z=0.0),
+            header=odom_header,
+            ns='orient_arrow',
+            rgb=(0.0, 1.0, 0.0),
+            marker_id=0
+        )
+        marker_array.markers.append(marker)
+        # Horizontal line in front of the robot wrt baselink
+        ref_line_odom = T @ np.array([2.0, 0.0, 1.0])
+        marker = self._create_arrow(
+            start_point=Point(x=robot_x, y=robot_y, z=robot_z),
+            end_point=Point(x=ref_line_odom[0], y=ref_line_odom[1], z=0.0),
+            header=odom_header,
+            ns='orient_arrow',
+            rgb=(0.0, 1.0, 0.0),
+            marker_id=1
+        )
         marker_array.markers.append(marker)
 
-        # Orientation to goal arrow
-        robot_yaw = observation['orient_to_goal'][0]
-        marker = Marker()
-        marker.header.frame_id = 'base_link'
-        marker.header.stamp = robot_pose.header.stamp
-        marker.ns = 'orient_arrow'
-        marker.id = 0
-        marker.type = Marker.ARROW
-        marker.scale.x = 2.0
-        marker.scale.y = 0.1
-        marker.scale.z = 0.1
-        marker.color.b = 1.0
-        marker.color.a = 1.0
-        q = euler2quat(0.0, 0.0, robot_yaw, 'sxyz')
-        marker.pose.orientation.w = q[0]
-        marker.pose.orientation.x = q[1]
-        marker.pose.orientation.y = q[2]
-        marker.pose.orientation.z = q[3]
-        marker.pose.position.x = 0.3
+        orient_to_goal = observation['orient_to_goal'][0]
+        marker = self._create_arc(
+            center=(0, 0),
+            radius=robot_radius,
+            theta_start=0,
+            theta_end=orient_to_goal,
+            header=base_link_header,
+            ns='arc',
+            rgb=(0.0, 1.0, 0.0),
+        )
+        marker_array.markers.append(marker)
+
+        marker = self._create_text(
+            text=f'{orient_to_goal:.4}rad',
+            midpoint_theta=orient_to_goal / 2,
+            radius=robot_radius + 0.5,
+            header=base_link_header,
+        )
         marker_array.markers.append(marker)
 
         self.debug_markers_pub.publish(marker_array)
+
+    def _create_arrow(
+            self,
+            start_point: Point,
+            end_point: Point,
+            header: Header,
+            ns: str = 'arrow',
+            marker_id: int = 0,
+            rgb: Tuple[float, float, float] = (1.0, 0.0, 0.0),
+    ) -> Marker:
+        marker = Marker()
+        marker.header = header
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+        marker.id = marker_id
+        marker.ns = ns
+        marker.scale.x = 0.05
+        marker.scale.y = 0.1
+        marker.scale.z = 0.2
+        marker.color.r, marker.color.g, marker.color.b = rgb
+        marker.color.a = 1.0
+        marker.points = [start_point, end_point]
+        return marker
+
+    def _create_arc(
+            self,
+            center: Tuple[float, float],
+            radius: float,
+            theta_start: float,
+            theta_end: float,
+            header: Header,
+            ns: str = 'arc',
+            marker_id: int = 0,
+            rgb: Tuple[float, float, float] = (0.0, 1.0, 0.0),
+            num_points: int = 50,
+    ) -> Marker:
+        marker = Marker()
+        marker.header = header
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.ns = ns
+        marker.id = marker_id
+        marker.scale.x = 0.02
+        marker.scale.z = 0.2
+        marker.color.r, marker.color.g, marker.color.b = rgb
+        marker.color.a = 1.0
+
+        delta = (theta_end - theta_start) / num_points
+        for i in range(num_points + 1):
+            theta = theta_start + i * delta
+            x = center[0] + radius * np.cos(theta)
+            y = center[1] + radius * np.sin(theta)
+            marker.points.append(Point(x=x, y=y, z=0.0))
+        return marker
+
+    def _create_text(
+            self,
+            text: str,
+            midpoint_theta: float,
+            radius: float,
+            header: Header,
+            marker_id: int = 0,
+    ) -> Marker:
+        marker = Marker()
+        marker.header = header
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.text = text
+        marker.id = marker_id
+        marker.scale.z = 0.25
+        marker.color.r = 1.0
+        marker.color.g = 1.0
+        marker.color.b = 1.0
+        marker.color.a = 1.0
+        # Position at arc midpoint
+        marker.pose.position.x = radius * np.cos(midpoint_theta)
+        marker.pose.position.y = radius * np.sin(midpoint_theta)
+        marker.pose.position.z = 0.1
+
+        return marker
 
 
 class SimulationControl(Node):
@@ -406,7 +497,7 @@ class SimulationControl(Node):
         pose_msg.header.frame_id = frame_id
         pose_msg.pose.pose = pose
 
-        covariance = 1e9*np.eye(6)
+        covariance = 1e-9*np.eye(6)
         # covariance[0][0] = 0.01  # x variance
         # covariance[1][1] = 0.01  # y variance
         # covariance[5][5] = 0.01  # yaw variance

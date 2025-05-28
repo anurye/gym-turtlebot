@@ -35,45 +35,44 @@ from transforms3d.euler import (
 
 class Turtlebot4Env(gym.Env):
     """
-    Gymnasium environment for a ROS2/Gazebo TurtleBot4 navigation task.
+    Gymnasium environment for a ROS2/Gazebo Turtlebot4 navigation task.
 
-    The agent must navigate a TurtleBot4 through a static map, avoiding obstacles
-    and reaching a randomly sampled goal. At each step, the policy outputs a
-    continuous linear and angular velocity between [0, 0] and [1, 1], which is scaled internally
-    and sent to the robot. Observations consist of discretized laser-range bins,
+    The goal is to navigate a Turtlebot4 robot through a static world and reach a randomly sampled
+    goal while avoiding obstacles. Observations consist of discretized laser-range bins,
     their bearing angles, the distance and orientation to the goal, and
     the previous action. Episodes terminate on goal reach or collision; timeouts
-    are handled by Gymnasium's TimeLimit wrapper.
+    are handled by Gymnasium's TimeLimit wrapper. Detailed description is given below.
 
     Observation Space
     -----------------
-    Dict({
-        'min_ranges': Box(low=range_min, high=range_max, shape=(num_bins,), float32),
-            Minimum distance reading within each of `num_bins` laser sectors.
-        'min_ranges_angle': Box(low=angle_min, high=angle_max, shape=(num_bins,), float32),
-            Corresponding bearing angles for each sector's minimum reading.
-        'dist_to_goal': Box(low=0.0, high=100.0, shape=(1,), float32),
-            Euclidean distance [m] from the robot to the goal.
-        'orient_to_goal': Box(low=-pi, high=pi, shape=(1,), float32),
-            Relative heading [rad] from robot's forward direction to the goal.
-        'action': Box(low=0.0, high=1.0, shape=(2,), float32),
-            The last executed (linear, angular) action.
-    })
+    1. min_ranges: Box(low=range_min, high=range_max, shape=(num_bins,), float32)
+        Minimum distance reading within each of `num_bins` laser sectors.
+        - range_min and range_max are obtained from the lidar sensor used.
+        - num_bins by default it 20.
+    2. min_ranges_angle: Box(low=angle_min, high=angle_max, shape=(num_bins,), float32)
+        Corresponding bearing angles for each scan sector's/bin's minimum reading.
+        - angle_min and angle_max are obtained from the lidar sensor used.
+    3. dist_to_goal: Box(low=0.0, high=100.0, shape=(1,), float32)
+        Euclidean distance [m] from the robot to the goal.
+    4. orient_to_goal: Box(low=-pi, high=pi, shape=(1,), float32)
+        Relative heading [rad] from robot's forward direction to the goal.
+    5. action: Box(low=0.0, high=1.0, shape=(2,), float32)
+        The last executed (linear, angular) action.
 
     Action Space
     ------------
-    Box(low=[0.0, 0.0], high=[1.0, 1.0], shape=(2,), dtype=float32)
-        Continuous two-dimensional action: normalized forward speed and yaw rate.
+    Continuous two-dimensional action:
+        Box(low=[0.0, -1.0], high=[1.0, 1.0], shape=(2,), dtype=float32)
 
     Transition Dynamics
     -------------------
     - On `step(action)`, the action is converted to a ROS2 Twist message and
       published. The simulator propagates the state for `time_delta` seconds. Laser and odometry
       data are retrieved, processed into the observation dict, and the previous action is included.
-    - The internal `ScenarioGenerator` may be used to shuffle obstacle positions on reset.
     - Resetting the environment (`reset`) will:
         1. Pause and reset the Gazebo world (Moldels only, which is currently not supported).
         2. Sample or accept provided `start_pos` and `goal_pos` (x, y, yaw) options.
+            - The internal `ScenarioGenerator` may be used to shuffle obstacle positions on reset.
         3. Teleport robot and obstacles to their poses and publish a goal marker.
         5. Propagate the state and return the initial observation and info.
 
@@ -115,41 +114,37 @@ class Turtlebot4Env(gym.Env):
     ```
     """
 
-    def __init__(self,
-                 world_name: str = 'static_world',
-                 robot_name: str = 'turtlebot4',
-                 map_path: Optional[str] = None,
-                 yaml_path: Optional[str] = None,
-                 spawn_launch_path: Optional[str] = None,
-                 robot_radius: float = 0.3,
-                 min_separation: float = 1.5,
-                 obstacle_prefix: str = 'obstacle',
-                 obstacle_clearance: float = 2.0,
-                 num_bins: int = 20,
-                 goal_threshold: float = 0.35,
-                 collision_threshold: float = 0.4,
-                 time_delta: float = 0.4,
-                 shuffle_on_reset: bool = True):
+    def __init__(
+            self,
+            world_name: str = 'static_world',
+            robot_name: str = 'turtlebot4',
+            map_path: Optional[Path] = None,
+            yaml_path: Optional[Path] = None,
+            sim_launch_path: Optional[Path] = None,
+            robot_radius: float = 0.3,
+            min_separation: float = 1.5,
+            goal_sampling_bias: str = 'uniform',
+            obstacle_prefix: str = 'obstacle',
+            obstacle_clearance: float = 2.0,
+            num_bins: int = 30,
+            goal_threshold: float = 0.35,
+            collision_threshold: float = 0.4,
+            time_delta: float = 0.4,
+            shuffle_on_reset: bool = True
+    ):
         super(Turtlebot4Env, self).__init__()
-
-        current_dir = Path(__file__).resolve().parent
-        if map_path is None:
-            map_path = current_dir / 'maps' / f'{world_name}.pgm'
-        if yaml_path is None:
-            yaml_path = current_dir / 'maps' / f'{world_name}.yaml'
-
-        if not map_path.resolve().exists():
-            raise FileNotFoundError(f'Map file missing at: {map_path}')
-        if not yaml_path.resolve().exists():
-            raise FileNotFoundError(f'Map metadata missing at: {yaml_path}')
 
         self.world_name = world_name
         self.robot_name = robot_name
-        self.map_path = map_path
-        self.yaml_path = yaml_path
-        self.spawn_launch_path = spawn_launch_path
+
+        current_dir = Path(__file__).resolve().parent
+        self.map_path = map_path or current_dir / 'maps' / f'{world_name}.pgm'
+        self.yaml_path = yaml_path or current_dir / 'maps' / f'{world_name}.yaml'
+
+        self.sim_launch_path = sim_launch_path
         self.robot_radius = robot_radius
         self.min_separation = min_separation
+        self.goal_sampling_bias = goal_sampling_bias
         self.obstacle_clearance = obstacle_clearance
         self.obstacle_prefix = obstacle_prefix
 
@@ -176,7 +171,7 @@ class Turtlebot4Env(gym.Env):
         self.pose_converter = PoseConverter()
         self.twist_converter = TwistConverter()
 
-        self.env_helper = ScenarioGenerator(
+        self.nav_scenario = ScenarioGenerator(
             map_path=self.map_path,
             yaml_path=self.yaml_path,
             robot_radius=self.robot_radius,
@@ -186,25 +181,25 @@ class Turtlebot4Env(gym.Env):
         )
 
         self.action_space = spaces.Box(
-            low=np.array([0.0, 0.0], dtype=np.float32),
+            low=np.array([0.0, -1.0], dtype=np.float32),
             high=np.array([1.0, 1.0], dtype=np.float32),
             dtype=np.float32
         )
-        self.observation_space = self._get_observation_space()
+        self.observation_space = self._build_observation_space()
 
         self._last_action = np.zeros(self.action_space.shape, dtype=np.float32)
 
-        self._target_pose: Optional[Pose] = None
+        self._goal_pose: Optional[Pose] = None
         self._start_pose: Optional[Pose] = None
 
-    def _get_observation_space(self) -> spaces.Dict:
+    def _build_observation_space(self) -> spaces.Dict:
         self.simulation_control.pause_unpause(pause=False)
         # Wait for scan and odometry to initialize
         while True:
             self.executor.spin_once(timeout_sec=0.1)
             range_min, range_max = self.sensors.get_range_min_max()
             angle_min, angle_max = self.sensors.get_angle_min_max()
-            if None not in [range_min, range_max, angle_min, angle_max]:
+            if None not in (range_min, range_max, angle_min, angle_max):
                 break
 
         return spaces.Dict({
@@ -287,8 +282,8 @@ class Turtlebot4Env(gym.Env):
         # Extract positions
         agent_x = agent_pose.position.x
         agent_y = agent_pose.position.y
-        goal_x = self._target_pose.position.x
-        goal_y = self._target_pose.position.y
+        goal_x = self._goal_pose.position.x
+        goal_y = self._goal_pose.position.y
 
         # Calculate relative distance
         dx = goal_x - agent_x
@@ -319,7 +314,11 @@ class Turtlebot4Env(gym.Env):
 
         return distance, relative_angle
 
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool]:
+    def step(
+            self,
+            action: np.ndarray,
+            debug: Optional[bool] = None
+    ) -> Tuple[np.ndarray, float, bool, bool]:
         # Store action for inclusion in next observation
         self._last_action = action.copy()
 
@@ -350,12 +349,20 @@ class Turtlebot4Env(gym.Env):
             dist_to_goal=observation['dist_to_goal']
         )
 
+        if debug:
+            self.ros_gz_pub.publish_observation(
+                observation=observation,
+                robot_pose=self.sensors.get_latest_pose_stamped(),
+                goal_pose=self._goal_pose
+            )
+
         return observation, reward, terminated, truncated, info
 
-    def reset(self,
-              seed: Optional[int] = None,
-              options: Optional[dict] = None
-              ) -> Tuple[Dict]:
+    def reset(
+            self,
+            seed: Optional[int] = None,
+            options: Optional[dict] = None
+    ) -> Tuple[Dict]:
         super().reset(seed=seed)
 
         self.simulation_control.reset_world()
@@ -374,9 +381,9 @@ class Turtlebot4Env(gym.Env):
         start_pos = options.get('start_pos')  # (x, y, yaw)
         goal_pos = options.get('goal_pos')    # (x, y, yaw)
         if start_pos is None or goal_pos is None:
-            start_xy, goal_xy = self.env_helper.generate_start_goal(
+            start_xy, goal_xy = self.nav_scenario.generate_start_goal(
                 max_attempts=100,
-                goal_sampling_bias='close',
+                goal_sampling_bias=self.goal_sampling_bias,
                 eps=1e-5,
             )
             start_yaw = np.random.uniform(-np.pi, np.pi)
@@ -391,7 +398,7 @@ class Turtlebot4Env(gym.Env):
             'position': (start_pos[0], start_pos[1], 0.01),
             'orientation': (start_quat[1], start_quat[2], start_quat[3], start_quat[0])
         })
-        self._target_pose = self.pose_converter.from_dict({
+        self._goal_pose = self.pose_converter.from_dict({
             'position': (goal_pos[0], goal_pos[1], 0.01),
             'orientation': (goal_quat[1], goal_quat[2], goal_quat[3], goal_quat[0])
         })
@@ -403,7 +410,7 @@ class Turtlebot4Env(gym.Env):
         self.simulation_control.set_pose(
             pose=self._start_pose, frame_id='odom'
         )
-        self.ros_gz_pub.pub_goal_marker(goal_pose=self._target_pose)
+        self.ros_gz_pub.pub_goal_marker(goal_pose=self._goal_pose)
 
         # Shuffle obstacles
         if self.shuffle_on_reset:
@@ -414,13 +421,11 @@ class Turtlebot4Env(gym.Env):
         observation, info = self._propagate_state(time_delta=self.time_delta)
 
         if options.get('debug'):
-            self.simulation_control.pause_unpause(pause=False)
             self.ros_gz_pub.publish_observation(
                 observation=observation,
                 robot_pose=self.sensors.get_latest_pose_stamped(),
-                goal_pose=self._target_pose
+                goal_pose=self._goal_pose
             )
-            self.simulation_control.pause_unpause(pause=True)
 
         return observation, info
 
@@ -441,7 +446,7 @@ class Turtlebot4Env(gym.Env):
     def _shuffle_obstacles(self, start_pos: np.ndarray, goal_pos: np.ndarray) -> None:
         # Get random obstacle locations
         obstacles = self.simulation_control.get_obstacles(starts_with=self.obstacle_prefix)
-        obstacles_pos = self.env_helper.generate_obstacles(
+        obstacles_pos = self.nav_scenario.generate_obstacles(
             num_obstacles=len(obstacles), start_pos=start_pos, goal_pos=goal_pos
         )
         for obs_pos, obs_name in zip(obstacles_pos, obstacles[:len(obstacles_pos)]):
@@ -454,10 +459,12 @@ class Turtlebot4Env(gym.Env):
                 entity_name=obs_name, pose=obs_pose
             )
 
-    def _get_reward(self,
-                    action: np.ndarray,
-                    min_ranges: np.ndarray,
-                    dist_to_goal: float) -> float:
+    def _get_reward(
+            self,
+            action: np.ndarray,
+            min_ranges: np.ndarray,
+            dist_to_goal: float
+    ) -> float:
         if self._goal_reached(dist_to_goal=dist_to_goal):
             return 100.0
         if self._collision(min_ranges=min_ranges):
@@ -505,7 +512,7 @@ def main():
             print('Min range:', min(min_ranges))
             print('Min range angle:', min_ranges_angles[np.argmin(min_ranges)])
     except KeyboardInterrupt:
-        env.close()
+        pass
     finally:
         env.close()
 
