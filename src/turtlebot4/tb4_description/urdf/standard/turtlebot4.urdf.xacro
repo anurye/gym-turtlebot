@@ -132,7 +132,7 @@
   <!-- Turtlebot4 sensor definitions -->
   <xacro:rplidar name="rplidar" parent_link="shell_link" gazebo="$(arg gazebo)">
     <origin xyz="${rplidar_x_offset} ${rplidar_y_offset} ${rplidar_z_offset}"
-            rpy="0 0 ${pi/2}"/>
+            rpy="0 0 0"/>
   </xacro:rplidar>
 
   <xacro:camera_bracket name="oakd_camera_bracket">

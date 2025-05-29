@@ -12,12 +12,16 @@
   <depend>nav_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>ros_gz_interfaces</depend>
+  <depend>visualization_msgs</depend>
+  <depend>robot_localization</depend>
   <depend>tb4_gz_sim</depend>
 
   <!-- Python dependencies -->
   <depend>python3-gymnasium-pip</depend>
+  <depend>python3-tqdm</depend>
   <depend>python3-transforms3d</depend>
   <depend>python3-stable-baselines3-pip</depend>
+  <depend>python3-tensorboard-pip</depend>
   <depend>python3-opencv</depend>
   <depend>python3-sklearn</depend>
 
