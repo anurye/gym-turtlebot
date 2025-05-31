@@ -35,12 +35,12 @@ class EnvConfig:
     num_bins: int = 20
     goal_threshold: float = 0.35
     collision_threshold: float = 0.4
-    time_delta: float = 0.4
+    time_delta: float = 0.1
     shuffle_on_reset: bool = True
 
     map_path: Optional[Path] = None
     yaml_path: Optional[Path] = None
-    sim_launch_path: Optional[Path] = None
+    sim_launch_name: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -72,8 +72,8 @@ class ExperimentConfig:
     sac: SACConfig = field(default_factory=SACConfig)
 
     total_timesteps: int = 1_000_000
-    save_freq: int = 50_000
-    eval_freq: int = 50_000
+    save_freq: int = 5000
+    eval_freq: int = 5000
     n_eval_episodes: int = 5
     seed: Optional[int] = 42
     use_deterministic_cudnn: bool = False
@@ -124,6 +124,8 @@ class SACExperiment:
         )
 
         print(self.model.policy)
+
+        print('Device:', self.model.device)
 
     def _set_seeds(self):
         if self.config.seed is not None:

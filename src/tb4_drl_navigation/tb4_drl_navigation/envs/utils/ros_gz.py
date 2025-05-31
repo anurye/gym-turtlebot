@@ -238,7 +238,7 @@ class Publisher(Node):
             x_local = min_range * np.cos(min_angle)
             y_local = min_range * np.sin(min_angle)
 
-            p_odom = T @ np.array([x_local, y_local, 1])
+            p_odom = T @ np.array([x_local, y_local, 1], dtype=np.float32)
 
             marker = Marker()
             marker.header = odom_header
@@ -250,7 +250,7 @@ class Publisher(Node):
             marker.color.a = 1.0
             marker.color.r = 1.0
             start = Point(x=robot_x, y=robot_y, z=robot_z)
-            end = Point(x=p_odom[0], y=p_odom[1], z=robot_z)
+            end = Point(x=float(p_odom[0]), y=float(p_odom[1]), z=robot_z)
             marker.points = [start, end]
             marker_array.markers.append(marker)
 
@@ -265,10 +265,10 @@ class Publisher(Node):
         )
         marker_array.markers.append(marker)
         # Horizontal line in front of the robot wrt baselink
-        ref_line_odom = T @ np.array([2.0, 0.0, 1.0])
+        ref_line_odom = T @ np.array([2.0, 0.0, 1.0], dtype=np.float32)
         marker = self._create_arrow(
             start_point=Point(x=robot_x, y=robot_y, z=robot_z),
-            end_point=Point(x=ref_line_odom[0], y=ref_line_odom[1], z=0.0),
+            end_point=Point(x=float(ref_line_odom[0]), y=float(ref_line_odom[1]), z=0.0),
             header=odom_header,
             ns='orient_arrow',
             rgb=(0.0, 1.0, 0.0),
@@ -278,9 +278,9 @@ class Publisher(Node):
 
         orient_to_goal = observation['orient_to_goal'][0]
         marker = self._create_arc(
-            center=(0, 0),
+            center=(0.0, 0.0),
             radius=robot_radius,
-            theta_start=0,
+            theta_start=0.0,
             theta_end=orient_to_goal,
             header=base_link_header,
             ns='arc',
@@ -349,7 +349,7 @@ class Publisher(Node):
             theta = theta_start + i * delta
             x = center[0] + radius * np.cos(theta)
             y = center[1] + radius * np.sin(theta)
-            marker.points.append(Point(x=x, y=y, z=0.0))
+            marker.points.append(Point(x=float(x), y=float(y), z=0.0))
         return marker
 
     def _create_text(
@@ -371,8 +371,8 @@ class Publisher(Node):
         marker.color.b = 1.0
         marker.color.a = 1.0
         # Position at arc midpoint
-        marker.pose.position.x = radius * np.cos(midpoint_theta)
-        marker.pose.position.y = radius * np.sin(midpoint_theta)
+        marker.pose.position.x = float(radius * np.cos(midpoint_theta))
+        marker.pose.position.y = float(radius * np.sin(midpoint_theta))
         marker.pose.position.z = 0.1
 
         return marker

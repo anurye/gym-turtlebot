@@ -100,7 +100,7 @@
         name="gz::sim::systems::DiffDrive">
         <left_joint>left_wheel_joint</left_joint>
         <right_joint>right_wheel_joint</right_joint>
-        <wheel_separation>0.233</wheel_separation>
+        <wheel_separation>0.248</wheel_separation>
         <wheel_radius>0.03575</wheel_radius>
         <max_linear_acceleration>2</max_linear_acceleration>
         <min_linear_acceleration>-2</min_linear_acceleration>

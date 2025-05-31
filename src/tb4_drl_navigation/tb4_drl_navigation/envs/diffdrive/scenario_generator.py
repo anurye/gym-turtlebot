@@ -465,29 +465,30 @@ class ScenarioGenerator:
 
 def main():
     logging.basicConfig(level=logging.INFO)
+
+    current_dir = Path(__file__).parent
+    default_map = current_dir / 'maps' / 'static_world.pgm'
+    default_yaml = current_dir / 'maps' / 'static_world.yaml'
+
+    parser = argparse.ArgumentParser(
+        description='Load and process a static world map and its metadata YAML.'
+    )
+    parser.add_argument(
+        '-m', '--map',
+        type=Path,
+        default=default_map,
+        help=f'Path to the PGM map file (default: {default_map})'
+    )
+    parser.add_argument(
+        '-y', '--yaml',
+        type=Path,
+        default=default_yaml,
+        help=f'Path to the YAML metadata file (default: {default_yaml})'
+    )
+
+    args = parser.parse_args()
+
     try:
-        current_dir = Path(__file__).parent
-        default_map = current_dir / 'maps' / 'static_world.pgm'
-        default_yaml = current_dir / 'maps' / 'static_world.yaml'
-
-        parser = argparse.ArgumentParser(
-            description='Load and process a static world map and its metadata YAML.'
-        )
-        parser.add_argument(
-            '-m', '--map',
-            type=Path,
-            default=default_map,
-            help=f'Path to the PGM map file (default: {default_map})'
-        )
-        parser.add_argument(
-            '-y', '--yaml',
-            type=Path,
-            default=default_yaml,
-            help=f'Path to the YAML metadata file (default: {default_yaml})'
-        )
-
-        args = parser.parse_args()
-
         nav_scenario = ScenarioGenerator(
             map_path=args.map,
             yaml_path=args.yaml,
@@ -505,10 +506,6 @@ def main():
             num_obstacles=12, start_pos=start, goal_pos=goal
         )
 
-        nav_scenario.logger.info(f'Start: {start}')
-        nav_scenario.logger.info(f'Goal: {goal}')
-        nav_scenario.logger.info(f'Obstacles: {obstacles}')
-
         nav_scenario.plot_debug(
             start_pos=start, goal_pos=goal, obstacles=obstacles
         )
@@ -516,6 +513,10 @@ def main():
     except Exception as e:
         logging.error(f'Error: {e}')
         raise
+
+    nav_scenario.logger.info(f'Start: {start}')
+    nav_scenario.logger.info(f'Goal: {goal}')
+    nav_scenario.logger.info(f'Obstacles: {obstacles}')
 
 
 if __name__ == '__main__':

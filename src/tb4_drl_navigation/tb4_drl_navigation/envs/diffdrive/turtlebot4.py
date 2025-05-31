@@ -27,6 +27,7 @@ from tb4_drl_navigation.utils.dtype_convertor import (
     PoseConverter,
     TwistConverter,
 )
+from tb4_drl_navigation.utils.launch import Launcher
 from transforms3d.euler import (
     euler2quat,
     quat2euler,
@@ -120,7 +121,7 @@ class Turtlebot4Env(gym.Env):
             robot_name: str = 'turtlebot4',
             map_path: Optional[Path] = None,
             yaml_path: Optional[Path] = None,
-            sim_launch_path: Optional[Path] = None,
+            sim_launch_name: Optional[Path] = None,
             robot_radius: float = 0.3,
             min_separation: float = 1.5,
             goal_sampling_bias: str = 'uniform',
@@ -141,12 +142,15 @@ class Turtlebot4Env(gym.Env):
         self.map_path = map_path or current_dir / 'maps' / f'{world_name}.pgm'
         self.yaml_path = yaml_path or current_dir / 'maps' / f'{world_name}.yaml'
 
-        self.sim_launch_path = sim_launch_path
+        self.sim_launch_name = sim_launch_name
         self.robot_radius = robot_radius
         self.min_separation = min_separation
         self.goal_sampling_bias = goal_sampling_bias
         self.obstacle_clearance = obstacle_clearance
         self.obstacle_prefix = obstacle_prefix
+
+        if self.sim_launch_name:
+            self._launch_simulation()
 
         self.num_bins = num_bins
 
@@ -191,6 +195,16 @@ class Turtlebot4Env(gym.Env):
 
         self._goal_pose: Optional[Pose] = None
         self._start_pose: Optional[Pose] = None
+
+    def _launch_simulation(self) -> None:
+        workspace_dir = Launcher().find_workspace(start_dir=Path(__file__).parent)
+        launcher = Launcher(workspace_dir=workspace_dir)
+        launcher.launch(
+            'tb4_gz_sim',
+            self.sim_launch_name,
+            'use_sim_time:=true',
+            build_first=True,
+        )
 
     def _build_observation_space(self) -> spaces.Dict:
         self.simulation_control.pause_unpause(pause=False)
@@ -375,8 +389,6 @@ class Turtlebot4Env(gym.Env):
         })
         self.ros_gz_pub.pub_cmd_vel(twist_msg)
 
-        self.ros_gz_pub.clear_path()
-
         options = options or {}
         start_pos = options.get('start_pos')  # (x, y, yaw)
         goal_pos = options.get('goal_pos')    # (x, y, yaw)
@@ -426,6 +438,8 @@ class Turtlebot4Env(gym.Env):
                 robot_pose=self.sensors.get_latest_pose_stamped(),
                 goal_pose=self._goal_pose
             )
+
+        self.ros_gz_pub.clear_path()
 
         return observation, info
 
