@@ -16,6 +16,6 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Build and push docs
         uses: athackst/mkdocs-simple-plugin@v4.0.0
